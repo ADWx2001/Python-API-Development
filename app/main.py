@@ -2,14 +2,25 @@ from fastapi import FastAPI,Response, status, HTTPException
 from fastapi.params import Body
 from pydantic import BaseModel
 from random import randrange #imported for gennerate random numbers
-
+import psycopg2
+from psycopg2.extras import RealDictCursor
 
 app = FastAPI()
 
 class Post(BaseModel):
     title: str
-    description: str
+    content: str
     published: bool = True
+
+#connecting to databse locally
+try:
+    conn = psycopg2.connect(host='localhost', database='fastapi', user='postgres', password='ASAnka119@', cursor_factory=RealDictCursor)
+    cursor = conn.cursor()
+    print("Database connection successfull!")
+except Exception as error:
+    print(f"Connecting to databse Unsuccessfull, caused this {error}")
+
+
 
 my_posts = [{"title":"Post 1 title", "content":"Post 1 content", "id":"1"},{"title":"Post 1 title", "content":"Post 1 content", "id":"2"}]
 
@@ -20,16 +31,23 @@ async def read_root():
 #retrieve all the posts
 @app.get("/getposts")
 def get_posts():
-    return {"data": my_posts}
+    cursor.execute("""SELECT * FROM posts""")
+    posts = cursor.fetchall()
+    return {"data": posts}
 
 #create a new post
 @app.post("/createpost", status_code=status.HTTP_201_CREATED) #this status code is the suitable for creating records 
-def create_post(payLoad : Post):
-    print(payLoad.model_dump())
-    post_dict = payLoad.model_dump()  #convert the incoming reqest data to dictionary type
-    post_dict['id'] = randrange(0,100000) #add randomm number as id to the post_dict dictionary type variable.
-    my_posts.append(post_dict) #save the data to my_posts dictinary type
-    return {"Data": post_dict}
+def create_post(post : Post):
+    # print(payLoad.model_dump())
+    # post_dict = payLoad.model_dump()  #convert the incoming reqest data to dictionary type
+    # post_dict['id'] = randrange(0,100000) #add randomm number as id to the post_dict dictionary type variable.
+    # my_posts.append(post_dict) #save the data to my_posts dictinary type
+
+    cursor.execute(""" INSERT INTO posts (title, content, published) VALUES (%s, %s, %s) RETURNING *""",
+                     (post.title, post.content, post.published))
+    new_post = cursor.fetchone()
+    conn.commit()
+    return {"Data": new_post}
 
 #function to find the post
 def find_post(id):
