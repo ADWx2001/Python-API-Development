@@ -70,7 +70,10 @@ def get_latest_post():
 #get only one post
 @app.get("/getpost/{id}")
 def get_post(id : int, respose : Response): #validating the id is integer or not
-    post = find_post(id)
+    cursor.execute(""" SELECT * FROM posts WHERE id = %s""", (str(id)))
+    post = cursor.fetchone()
+    print(post)
+    #post = find_post(id)
     if not post:
         # respose.status_code = status.HTTP_404_NOT_FOUND
         # return {"message":"post with this id is not found"}
@@ -82,19 +85,26 @@ def get_post(id : int, respose : Response): #validating the id is integer or not
 #need the id od the post in dictionary then pop the id
 @app.delete("/deletepost/{id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_post(id):
-    index = find_post_dic_id(id)
-    if index == None:
+    #index = find_post_dic_id(id)
+    cursor.execute("""delete from posts where id = %s returning *""", (str(id),))
+    delete_post = cursor.fetchone()
+    conn.commit()
+    if delete_post == None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"post with id:{id} was not found ")
-    my_posts.pop(index)
+    #my_posts.pop(index)
     return {"message": "post was deleted"}
 
 
 @app.put("/update/{id}")
 def update_post(id : int, post :Post):
-    index = find_post_dic_id(id)
-    if index == None:
+    cursor.execute(""" UPDATE posts set title=%s, content=%s, published=%s WHERE id =%s RETURNING *""",
+    (post.title, post.content, post.published, str(id)))
+    updated_post = cursor.fetchone()
+    conn.commit()
+    # index = find_post_dic_id(id)
+    if updated_post == None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"post with id:{id}")
-    post_dict = post.dict()
-    post_dict['id'] = id
-    my_posts[index] = post_dict
-    return {"message": "post was updated"}
+    # post_dict = post.dict()
+    # post_dict['id'] = id
+    # my_posts[index] = post_dict
+    return {"message": update_post}
