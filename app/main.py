@@ -33,12 +33,12 @@ class Post(BaseModel):
     published: bool = True
 
 #connecting to databse locally
-try:
-    conn = psycopg2.connect(host='localhost', database='fastapi', user='postgres', password='ASAnka119@', cursor_factory=RealDictCursor)
-    cursor = conn.cursor()
-    print("Database connection successfull!")
-except Exception as error:
-    print(f"Connecting to databse Unsuccessfull, caused this {error}")
+# try:
+#     conn = psycopg2.connect(host='localhost', database='fastapi', user='postgres', password='ASAnka119@', cursor_factory=RealDictCursor)
+#     cursor = conn.cursor()
+#     print("Database connection successfull!")
+# except Exception as error:
+#     print(f"Connecting to databse Unsuccessfull, caused this {error}")
 
 
 
@@ -50,23 +50,33 @@ async def read_root():
 
 #retrieve all the posts
 @app.get("/getposts")
-def get_posts():
-    cursor.execute("""SELECT * FROM posts""")
-    posts = cursor.fetchall()
+def get_posts(db: Session = Depends(get_db)):
+    # cursor.execute("""SELECT * FROM posts""")
+    # posts = cursor.fetchall()
+    posts = db.query(models.Post).all()
     return {"data": posts}
 
 #create a new post
 @app.post("/createpost", status_code=status.HTTP_201_CREATED) #this status code is the suitable for creating records 
-def create_post(post : Post):
+def create_post(post : Post, db: Session = Depends(get_db)):
     # print(payLoad.model_dump())
     # post_dict = payLoad.model_dump()  #convert the incoming reqest data to dictionary type
     # post_dict['id'] = randrange(0,100000) #add randomm number as id to the post_dict dictionary type variable.
     # my_posts.append(post_dict) #save the data to my_posts dictinary type
 
-    cursor.execute(""" INSERT INTO posts (title, content, published) VALUES (%s, %s, %s) RETURNING *""",
-                     (post.title, post.content, post.published))
-    new_post = cursor.fetchone()
-    conn.commit()
+    #this down below is sql query using the psycog2 library 
+    # cursor.execute(""" INSERT INTO posts (title, content, published) VALUES (%s, %s, %s) RETURNING *""",
+    #                  (post.title, post.content, post.published))
+    # new_post = cursor.fetchone()
+    # conn.commit()
+
+    # this below code is using sqlalchemy library
+    # new_post = models.Post(title=post.title, content=post.content, published=post.published) 
+    # if we have 50 entriens in the coming request  we have to seperate all it line in above code and it not efficient we use this instead of
+    new_post = models.Post(**post.model_dump())
+    db.add(new_post)
+    db.commit() # every changes need to be commit to the database otherwise it's not gonna save to the database
+    db.refresh(new_post) #use for get the result of newly created post earlier we use RETURNING * keyword this method is used for that
     return {"Data": new_post}
 
 #function to find the post
@@ -89,14 +99,18 @@ def get_latest_post():
 
 #get only one post
 @app.get("/getpost/{id}")
-def get_post(id : int, respose : Response): #validating the id is integer or not
-    cursor.execute(""" SELECT * FROM posts WHERE id = %s""", (str(id)))
-    post = cursor.fetchone()
-    print(post)
+def get_post(id : int, db: Session = Depends(get_db)): #validating the id is integer or not
+    # cursor.execute(""" SELECT * FROM posts WHERE id = %s""", (str(id)))
+    # post = cursor.fetchone()
+    # print(post)
     #post = find_post(id)
+
+    # top code is used by psycog2 and below code sqlalchmey
+    post = db.query(models.Post).filter(models.Post.id == id).first() # used first for send back fist record that postgre found otherwise use .all() can waste the resource because after found a record it going to be find all the records that matched that id  
     if not post:
         # respose.status_code = status.HTTP_404_NOT_FOUND
         # return {"message":"post with this id is not found"}
+
         #without hardcoding everything we can do throw an httpexception
         raise HTTPException(status_code= status.HTTP_404_NOT_FOUND, detail=f"post with id:{id} was not found ")
     return {"Post detail": post}
@@ -104,27 +118,43 @@ def get_post(id : int, respose : Response): #validating the id is integer or not
 #delete a post from dictionary
 #need the id od the post in dictionary then pop the id
 @app.delete("/deletepost/{id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_post(id):
-    #index = find_post_dic_id(id)
-    cursor.execute("""delete from posts where id = %s returning *""", (str(id),))
-    delete_post = cursor.fetchone()
-    conn.commit()
-    if delete_post == None:
+def delete_post(id,db: Session = Depends(get_db)):
+    # #index = find_post_dic_id(id)
+    # cursor.execute("""delete from posts where id = %s returning *""", (str(id),))
+    # delete_post = cursor.fetchone()
+    # conn.commit()
+
+    # top code is using psycog2 and below code is sqlalchemy
+    post = db.query(models.Post).filter(models.Post.id == id)
+    if post.first() == None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"post with id:{id} was not found ")
     #my_posts.pop(index)
+
+    post.delete(synchronize_session=False)
+    db.commit()
     return {"message": "post was deleted"}
 
 
+
 @app.put("/update/{id}")
-def update_post(id : int, post :Post):
-    cursor.execute(""" UPDATE posts set title=%s, content=%s, published=%s WHERE id =%s RETURNING *""",
-    (post.title, post.content, post.published, str(id)))
-    updated_post = cursor.fetchone()
-    conn.commit()
+def update_post(id : int, post_updated :Post,db: Session = Depends(get_db)):
+    # cursor.execute(""" UPDATE posts set title=%s, content=%s, published=%s WHERE id =%s RETURNING *""",
+    # (post.title, post.content, post.published, str(id)))
+    # updated_post = cursor.fetchone()
+    # conn.commit()
+
     # index = find_post_dic_id(id)
-    if updated_post == None:
+
+    #this below is sql alchemy code
+    post_query = db.query(models.Post).filter(models.Post.id == id)
+    post = post_query.first()
+
+    if post == None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"post with id:{id}")
     # post_dict = post.dict()
     # post_dict['id'] = id
     # my_posts[index] = post_dict
-    return {"message": update_post}
+
+    post_query.update(post_updated.model_dump(), synchronize_session=False)
+    db.commit()
+    return {"message": post_query.first()}
