@@ -1,11 +1,31 @@
-from fastapi import FastAPI,Response, status, HTTPException
+from fastapi import FastAPI,Response, status, HTTPException, Depends
 from fastapi.params import Body
 from pydantic import BaseModel
 from random import randrange #imported for gennerate random numbers
 import psycopg2
 from psycopg2.extras import RealDictCursor
+from .import models
+from .database import engine, SessionLocal
+from sqlalchemy.orm import Session
+import time
+
+models.Base.metadata.create_all(bind=engine) #this create all the models when start run the main file, sqlalchemy
 
 app = FastAPI()
+
+# this is used for sqlalchemy
+def get_db():
+    db = SessionLocal() #session object is the thing that call with databses
+    try:
+        yield db
+    finally:
+        db.close()
+
+@app.get("/sqlalchemy")
+def test_post(db: Session = Depends(get_db)):
+    posts = db.query(models.Post).all()
+    return {"status":posts}
+
 
 class Post(BaseModel):
     title: str
