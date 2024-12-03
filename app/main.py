@@ -4,15 +4,13 @@ from pydantic import BaseModel
 from random import randrange #imported for gennerate random numbers
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from .import models, schemas
+from .import models, schemas, utils
 from .database import engine, SessionLocal
 from sqlalchemy.orm import Session
 import time
 from typing import Optional, List
 import bcrypt
-from passlib.context import CryptContext
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 models.Base.metadata.create_all(bind=engine) #this create all the models when start run the main file, sqlalchemy
 
 app = FastAPI()
@@ -180,7 +178,7 @@ def create_user(user: schemas.UserBase, db: Session = Depends(get_db)):
 
     # new method
     user_data = user.model_dump()
-    new_hashed_password = pwd_context.hash(user.password)
+    new_hashed_password = utils.hash(user.password)
     user_data['password'] = new_hashed_password
     
     # create a new user
