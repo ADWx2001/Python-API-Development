@@ -9,7 +9,10 @@ from .database import engine, SessionLocal
 from sqlalchemy.orm import Session
 import time
 from typing import Optional, List
+import bcrypt
+from passlib.context import CryptContext
 
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 models.Base.metadata.create_all(bind=engine) #this create all the models when start run the main file, sqlalchemy
 
 app = FastAPI()
@@ -89,7 +92,6 @@ def get_latest_post():
 #Fast api is not going to come to this function because in top of there a url pattern similar to this "/getpost/some variable" 
 # and it going to that function anw server run in to error ti fix that we can push this function to up |^
 
-
 #get only one post
 @app.get("/getpost/{id}", response_model=schemas.Post)
 def get_post(id : int, db: Session = Depends(get_db)): #validating the id is integer or not
@@ -127,8 +129,6 @@ def delete_post(id,db: Session = Depends(get_db)):
     db.commit()
     return {"message": "post was deleted"}
 
-
-
 @app.put("/update/{id}",response_model=schemas.Post)
 def update_post(id : int, post_updated :schemas.Post, db: Session = Depends(get_db)):
     # cursor.execute(""" UPDATE posts set title=%s, content=%s, published=%s WHERE id =%s RETURNING *""",
@@ -151,3 +151,42 @@ def update_post(id : int, post_updated :schemas.Post, db: Session = Depends(get_
     post_query.update(post_updated.model_dump(), synchronize_session=False)
     db.commit()
     return {"message": post_query.first()}
+
+
+#retrieve all the users
+@app.get("/users", response_model=List[schemas.User])
+def get_posts(db: Session = Depends(get_db)):
+    # cursor.execute("""SELECT * FROM posts""")
+    # posts = cursor.fetchall()
+    users = db.query(models.User).all()
+    return users
+
+@app.post("/users", status_code=status.HTTP_201_CREATED, response_model = schemas.User)
+def create_user(user: schemas.UserBase, db: Session = Depends(get_db)):
+
+    # check if the user availabe with the email
+    existing_user =  db.query(models.User).filter(models.User.email == user.email).first()
+    if existing_user:
+        raise HTTPException(
+            status_code= status.HTTP_409_CONFLICT,
+            detail=f"User with email {user.email} already exists"
+        )
+    # hash the password - we will use bcrypt
+    # new_hashed_password = bcrypt.hashpw(user.password.encode('utf-8'), bcrypt.gensalt())
+
+    #replace the plain password with hashed one
+    # user_data = user.model_dump()
+    # user_data['password'] = new_hashed_password.decode("utf-8")
+
+    # new method
+    user_data = user.model_dump()
+    new_hashed_password = pwd_context.hash(user.password)
+    user_data['password'] = new_hashed_password
+    
+    # create a new user
+    new_user = models.User(**user_data)
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    return new_user
+
