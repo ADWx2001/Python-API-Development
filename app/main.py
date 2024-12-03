@@ -4,10 +4,11 @@ from pydantic import BaseModel
 from random import randrange #imported for gennerate random numbers
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from .import models
+from .import models, schemas
 from .database import engine, SessionLocal
 from sqlalchemy.orm import Session
 import time
+from typing import Optional, List
 
 models.Base.metadata.create_all(bind=engine) #this create all the models when start run the main file, sqlalchemy
 
@@ -21,16 +22,6 @@ def get_db():
     finally:
         db.close()
 
-@app.get("/sqlalchemy")
-def test_post(db: Session = Depends(get_db)):
-    posts = db.query(models.Post).all()
-    return {"status":posts}
-
-
-class Post(BaseModel):
-    title: str
-    content: str
-    published: bool = True
 
 #connecting to databse locally
 # try:
@@ -49,16 +40,17 @@ async def read_root():
     return {"Hello": "World"}
 
 #retrieve all the posts
-@app.get("/getposts")
+@app.get("/getposts", response_model=List[schemas.Post])
 def get_posts(db: Session = Depends(get_db)):
     # cursor.execute("""SELECT * FROM posts""")
     # posts = cursor.fetchall()
     posts = db.query(models.Post).all()
-    return {"data": posts}
+    return posts
 
 #create a new post
-@app.post("/createpost", status_code=status.HTTP_201_CREATED) #this status code is the suitable for creating records 
-def create_post(post : Post, db: Session = Depends(get_db)):
+@app.post("/createpost", status_code=status.HTTP_201_CREATED, response_model = schemas.Post) #this status code is the suitable for creating records ,and added response class from 
+                                                                                           #schemas to send back response to front and we can control what resoponse is going to the frontend by this 
+def create_post(post : schemas.PostCreate, db: Session = Depends(get_db)):
     # print(payLoad.model_dump())
     # post_dict = payLoad.model_dump()  #convert the incoming reqest data to dictionary type
     # post_dict['id'] = randrange(0,100000) #add randomm number as id to the post_dict dictionary type variable.
@@ -77,7 +69,7 @@ def create_post(post : Post, db: Session = Depends(get_db)):
     db.add(new_post)
     db.commit() # every changes need to be commit to the database otherwise it's not gonna save to the database
     db.refresh(new_post) #use for get the result of newly created post earlier we use RETURNING * keyword this method is used for that
-    return {"Data": new_post}
+    return new_post
 
 #function to find the post
 def find_post(id):
@@ -97,8 +89,9 @@ def get_latest_post():
 #Fast api is not going to come to this function because in top of there a url pattern similar to this "/getpost/some variable" 
 # and it going to that function anw server run in to error ti fix that we can push this function to up |^
 
+
 #get only one post
-@app.get("/getpost/{id}")
+@app.get("/getpost/{id}", response_model=schemas.Post)
 def get_post(id : int, db: Session = Depends(get_db)): #validating the id is integer or not
     # cursor.execute(""" SELECT * FROM posts WHERE id = %s""", (str(id)))
     # post = cursor.fetchone()
@@ -136,8 +129,8 @@ def delete_post(id,db: Session = Depends(get_db)):
 
 
 
-@app.put("/update/{id}")
-def update_post(id : int, post_updated :Post,db: Session = Depends(get_db)):
+@app.put("/update/{id}",response_model=schemas.Post)
+def update_post(id : int, post_updated :schemas.Post, db: Session = Depends(get_db)):
     # cursor.execute(""" UPDATE posts set title=%s, content=%s, published=%s WHERE id =%s RETURNING *""",
     # (post.title, post.content, post.published, str(id)))
     # updated_post = cursor.fetchone()
